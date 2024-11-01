@@ -52,6 +52,32 @@ static int cmd_q(char *args) {
   return -1;
 }
 
+
+static int cmd_si(char *args) {
+  unsigned long N = 0;
+  char *arg = NULL;
+
+  /* default steps = 1 */
+  if (!args) {
+    N = 1;
+  } else {
+    /* parse N */
+    arg = strtok(NULL, " ");
+    if (arg) {
+      N = strtoul(arg, NULL, 10);
+    } 
+
+    if (N <= 0) {
+      Log("si [N], which N must >= 1, but N is %lu", N);
+      return 0;
+    }
+  }
+
+  cpu_exec(N);
+  return 0;
+}
+
+
 static int cmd_help(char *args);
 
 static struct {
@@ -64,6 +90,7 @@ static struct {
   { "q", "Exit NEMU", cmd_q },
 
   /* TODO: Add more commands */
+  {"si", "Single step [N] instructions", cmd_si},
 
 };
 
