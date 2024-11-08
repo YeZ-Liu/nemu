@@ -18,6 +18,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
+#include "memory/paddr.h"
 
 static int is_batch_mode = false;
 
@@ -55,25 +56,114 @@ static int cmd_q(char *args) {
 
 static int cmd_si(char *args) {
   unsigned long N = 0;
-  char *arg = NULL;
 
   /* default steps = 1 */
   if (!args) {
     N = 1;
   } else {
     /* parse N */
-    arg = strtok(NULL, " ");
+    char *arg = strtok(NULL, " ");
     if (arg) {
       N = strtoul(arg, NULL, 10);
     } 
-
-    if (N <= 0) {
-      Log("si [N], which N must >= 1, but N is %lu", N);
-      return 0;
-    }
+  }
+  
+  if (N <= 0) {
+    Log("si [N], which N must >= 1, but N is %lu", N);
+    return 0;
   }
 
   cpu_exec(N);
+  return 0;
+}
+
+/* args should be [number] [EXPR] or NULL
+   EXPR right now only be a hex number prefixed with 0x
+ */
+static int cmd_x(char *args) {
+    if (!args) return 0;
+
+    int number = 0;
+    vaddr_t address = 0x0;
+
+    /* parse second token [number] */
+    char *arg = strtok(NULL, " ");
+    if (arg) {
+        number = strtoul(arg, NULL, 10);
+    }
+
+    /* parse third token [EXPR] */
+    arg = strtok(NULL, " ");
+    if (arg) {
+        sscanf(arg, "%x", &address);
+    }
+
+    printf("%d, 0x%x\n", number, address);
+
+    if (number <= 0) return 0;
+    if (address <= 0) return 0;
+
+    /* read data and print them, 
+       each line 16 bytes with an address
+     */
+    bool new_line = true;
+    int bytes_read = 0;
+    while (number > 0) {
+      uint32_t val = paddr_read(address, 4);
+
+      if (new_line) {
+        printf("\n0x%08x:\t", address);
+        new_line = false;
+      } 
+      printf("0x%08x\t", val);
+      bytes_read += 4;
+
+      if (bytes_read % 16 == 0) {
+        new_line = true;
+      }
+      
+      number -= 4;
+      address += 4;
+    }
+    printf("\n");
+
+    return 0;
+}
+
+static int cmd_info_r() {
+    isa_reg_display();
+    return 0;
+}
+
+static struct {
+  const char *name;
+  const char *description;
+  int (*handler) ();
+} info_table [] = {
+  { "info r", "display current registers", cmd_info_r},
+};
+
+#define NR_INFO ARRLEN(info_table)
+
+static int cmd_info(char *args) {
+    /* parse second arg, note args may be NULL */
+  int i;
+
+  if (!args) {
+    /* no argument given */
+    for (i = 0; i < NR_INFO; i ++) {
+      printf("%s - %s\n", info_table[i].name, info_table[i].description);
+    }
+  }
+  else {
+    /* find the command handler */
+    for (i = 0; i < NR_INFO; i ++) {
+      if (strcmp(args, info_table[i].name) == 0) {
+        return info_table[i].handler();
+      }
+    }
+    printf("Unknown arg '%s'\n", args);
+  }
   return 0;
 }
 
@@ -91,7 +181,8 @@ static struct {
 
   /* TODO: Add more commands */
   {"si", "Single step [N] instructions", cmd_si},
-
+  {"info", "show information for second arg", cmd_info},
+  {"x", "display memory content", cmd_x},
 };
 
 #define NR_CMD ARRLEN(cmd_table)
